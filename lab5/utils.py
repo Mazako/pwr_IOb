@@ -99,7 +99,7 @@ def reveal_message(image, nbits=1, length=0, spos=0):
     return message
 
 
-def mse(img_1, img_2):
+def mse(img_1, img_2) -> float:
     w, h, c = img_1.shape
     ms = np.sum((img_1.astype(float) - img_2.astype(float)) ** 2)
     return ms / (w * h * c)
@@ -116,4 +116,48 @@ def hide_image(image, secret_image_path, nbits=1):
     return hide_message(image, secret_img, nbits), len(secret_img)
 
 
+def reveal_image(image, length, nbits):
+    decoded_bytes_str = reveal_message(image, nbits, length)
+    bytes_image = [
+        int.to_bytes(
+            int(decoded_bytes_str[i: i + 8], 2),
+            1,
+            byteorder='little'
+        )
+        for i in range(0, len(decoded_bytes_str), 8)
+    ]
+    file = b''.join(bytes_image)
+    array = np.frombuffer(file, np.uint8)
+    return cv.cvtColor(cv.imdecode(array, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
 
+
+def reveal_image_no_len(image, nbits):
+    found_header = False
+    image = np.copy(image).flatten()
+    i = 0
+    byte_str_tmp = ''
+    byte_list = []
+    while not found_header and i < len(image):
+        _bytes = "{:08b}".format(image[i])[-nbits:]
+        byte_str_tmp += _bytes
+        if len(byte_str_tmp) >= 8:
+            full_byte = byte_str_tmp[:8]
+            byte_str_tmp = byte_str_tmp[8:]
+            byte_list.append(
+                int.to_bytes(
+                    int(full_byte, 2),
+                    1,
+                    byteorder='little'
+                )
+            )
+            if len(byte_list) > 1:
+                h1, h2 = byte_list[-2:]
+                if h1 == b'\xff' and h2 == b'\xd9':
+                    found_header = True
+        i += 1
+
+    if not found_header:
+        raise ValueError('JPEG file not found')
+    file = b''.join(byte_list)
+    array = np.frombuffer(file, np.uint8)
+    return cv.cvtColor(cv.imdecode(array, cv.IMREAD_COLOR), cv.COLOR_BGR2RGB)
